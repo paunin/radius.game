@@ -58,13 +58,22 @@ const LOGO_COLORS = [
 const MIN_CELL_VALUE = -23;
 const MAX_CELL_VALUE = 20;
 
-// Add helper function to determine font size based on value
-const getValueFontSize = (value: number) => {
-  const numDigits = Math.abs(value).toString().length + (value < 0 ? 1 : 0);
-  if (numDigits <= 1) return 'text-xl';
-  if (numDigits === 2) return 'text-lg';
-  return 'text-base';
+// Add animation timings
+const ANIMATIONS = {
+  BURN_DELAY_MAX: 1000,    // Maximum random delay for cell burning
+  BURN_DURATION_MIN: 1000, // Minimum burn duration
+  BURN_DURATION_MAX: 2000, // Maximum burn duration
+  TARGET_FADE_DURATION: 5000, // Duration for target highlight fade
+  BLINK_DURATION: 1000     // Duration for calculation blink effect
 };
+
+// Add burn effect colors
+const BURN_COLORS = [
+  'bg-yellow-500',  // Start yellow
+  'bg-orange-500',  // Then orange
+  'bg-red-600',     // Then red
+  'bg-gray-900'     // End black
+];
 
 // Update special cell configuration
 const SPECIAL_CELLS = {
@@ -95,13 +104,27 @@ const getNumericValue = (value: CellValue): number | null => {
   return typeof value === 'number' ? value : null;
 };
 
+// Keep types and constants outside the component
+type BurningCell = {
+  startTime: number;
+  duration: number;
+};
+
 export default function Index() {
+  // Add at the beginning of the component, with other helper functions
+  const getValueFontSize = (value: number) => {
+    const numDigits = Math.abs(value).toString().length + (value < 0 ? 1 : 0);
+    if (numDigits <= 1) return 'text-xl';
+    if (numDigits === 2) return 'text-lg';
+    return 'text-base';
+  };
+
+  // Move all state declarations here
   const [pixels, setPixels] = useState<Map<string, string>>(new Map());
   const [viewportOffset, setViewportOffset] = useState({ x: 0, y: 0 });
   const [hoveredCoords, setHoveredCoords] = useState<{ x: number, y: number } | null>(null);
   const [targetCoords, setTargetCoords] = useState<{ x: number, y: number } | null>(null);
   const [coordInput, setCoordInput] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 31, height: 31 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -110,18 +133,114 @@ export default function Index() {
   const [isGridHovered, setIsGridHovered] = useState(false);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [targetTimestamp, setTargetTimestamp] = useState<number | null>(null);
-  // Add new state for cell values and score
   const [cellValues, setCellValues] = useState<Map<string, CellValue>>(new Map());
   const [score, setScore] = useState(0);
-  // Add state for tracking cells involved in last calculation
   const [blinkingCells, setBlinkingCells] = useState<Set<string>>(new Set());
   const [blinkTimestamp, setBlinkTimestamp] = useState<number | null>(null);
-  // Add to state declarations
   const [lastCalculation, setLastCalculation] = useState<LastCalculation>(null);
   const [showCalculation, setShowCalculation] = useState(false);
-  // Add these inside the component
   const [gameOver, setGameOver] = useState<{ score: number, reason: string } | null>(null);
-  
+  const [burningCells, setBurningCells] = useState<Map<string, BurningCell>>(new Map());
+  const [isBurning, setIsBurning] = useState(false);
+  const [showNavigator, setShowNavigator] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Move helper functions inside component
+  const getShareText = (score: number) => `I scored ${score} points in Radius Game!`;
+
+  const getShareUrls = (score: number) => {
+    const text = getShareText(score);
+    const url = window.location.href;
+    
+    return {
+      twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`,
+      telegram: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`,
+      wechat: `weixin://dl/moments?text=${encodeURIComponent(`${text} ${url}`)}`,
+    };
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  // Move burning effect inside component
+  useEffect(() => {
+    if (!isBurning) return;
+    
+    // Initialize burning for visible cells with random delays and durations
+    const visibleCells = new Map<string, BurningCell>();
+    getVisibleGrid().forEach(row => {
+      row.forEach(cell => {
+        const coords = `${cell.x}:${cell.y}`;
+        if (!cell.isOutOfBounds) {
+          visibleCells.set(coords, {
+            startTime: Date.now() + Math.random() * ANIMATIONS.BURN_DELAY_MAX,
+            duration: ANIMATIONS.BURN_DURATION_MIN + Math.random() * 
+              (ANIMATIONS.BURN_DURATION_MAX - ANIMATIONS.BURN_DURATION_MIN)
+          });
+        }
+      });
+    });
+    setBurningCells(visibleCells);
+    
+    const animate = () => {
+      if (!isBurning) return;
+      
+      setBurningCells(prev => {
+        const current = new Map(prev);
+        let hasActiveCells = false;
+        
+        current.forEach((cell, coords) => {
+          const elapsed = Date.now() - cell.startTime;
+          if (elapsed >= cell.duration) {
+            // Remove the cell value and color when burning completes
+            setCellValues(prev => {
+              const next = new Map(prev);
+              next.delete(coords);
+              return next;
+            });
+            setPixels(prev => {
+              const next = new Map(prev);
+              next.delete(coords);
+              return next;
+            });
+            current.delete(coords);
+          } else {
+            hasActiveCells = true;
+          }
+        });
+        
+        if (!hasActiveCells && current.size === 0) {
+          setIsBurning(false);
+        }
+        
+        return current;
+      });
+      
+      requestAnimationFrame(animate);
+    };
+    
+    requestAnimationFrame(animate);
+  }, [isBurning]);
+
+  // Move getBurnColor helper inside component
+  const getBurnColor = (coords: string, baseColor: string) => {
+    if (!isBurning || !burningCells.has(coords)) return baseColor;
+    
+    const cell = burningCells.get(coords)!;
+    const elapsed = Date.now() - cell.startTime;
+    const progress = Math.min(1, elapsed / cell.duration);
+    
+    const colors = BURN_COLORS;
+    const index = Math.floor(progress * (colors.length - 1));
+    return colors[index];
+  };
+
   // Add restart function inside component
   const restartGame = () => {
     setScore(0);
@@ -245,6 +364,31 @@ export default function Index() {
         specialEffect = 'Game Over!';
         setGameOver({ score: 0, reason: 'Game Over!' });
         setScore(0);
+        
+        // Clear all values immediately
+        const visibleCells = new Set<string>();
+        getVisibleGrid().forEach(row => {
+          row.forEach(cell => {
+            if (!cell.isOutOfBounds) {
+              visibleCells.add(`${cell.x}:${cell.y}`);
+            }
+          });
+        });
+        
+        // Clear values and start burning
+        setCellValues(new Map());
+        setIsBurning(true);
+        
+        // Initialize burning for all visible cells
+        const burningCellsMap = new Map<string, BurningCell>();
+        visibleCells.forEach(coords => {
+          burningCellsMap.set(coords, {
+            startTime: Date.now() + Math.random() * ANIMATIONS.BURN_DELAY_MAX,
+            duration: ANIMATIONS.BURN_DURATION_MIN + Math.random() * 
+              (ANIMATIONS.BURN_DURATION_MAX - ANIMATIONS.BURN_DURATION_MIN)
+          });
+        });
+        setBurningCells(burningCellsMap);
       } else if (rand < (cumChance += SPECIAL_CELLS.F.chance)) {
         value = 'F';
         specialEffect = 'Game Finished!';
@@ -476,11 +620,52 @@ export default function Index() {
     return radiusSum;
   };
 
+  // Add game started check at the top of the component
+  const hasGameStarted = cellValues.size > 0;
+
+  // Add touch event handlers to the grid container
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    setDragStart({ 
+      x: e.touches[0].clientX, 
+      y: e.touches[0].clientY 
+    });
+    setInitialOffset(viewportOffset);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    
+    const deltaX = Math.round((e.touches[0].clientX - dragStart.x) / CELL_SIZE);
+    const deltaY = Math.round((e.touches[0].clientY - dragStart.y) / CELL_SIZE);
+    
+    const halfWidth = Math.floor(viewportSize.width / 2);
+    const halfHeight = Math.floor(viewportSize.height / 2);
+
+    const maxX = MAX_COORD - halfWidth;
+    const minX = MIN_COORD + halfWidth;
+    const maxY = MAX_COORD - halfHeight;
+    const minY = MIN_COORD + halfHeight;
+
+    const newX = initialOffset.x + deltaX;
+    const newY = initialOffset.y + deltaY;
+
+    // Clamp values to prevent going out of bounds
+    const clampedX = Math.min(maxX, Math.max(minX, newX));
+    const clampedY = Math.min(maxY, Math.max(minY, newY));
+
+    // Only update if within bounds
+    if (clampedX >= minX && clampedX <= maxX && clampedY >= minY && clampedY <= maxY) {
+      setViewportOffset({ x: clampedX, y: clampedY });
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-gray-100 dark:bg-gray-900">
       {/* Dynamic Logo */}
       <motion.h1 
-        className="absolute top-4 left-4 z-10 text-6xl font-black tracking-tight bg-clip-text text-transparent select-none"
+        className="absolute top-4 left-4 z-10 font-black tracking-tight bg-clip-text text-transparent select-none
+          flex flex-col sm:flex-row items-start sm:items-center gap-0 sm:gap-2"
         animate={{ 
           backgroundImage: LOGO_COLORS.map(([from, to]) => `linear-gradient(45deg, ${from}, ${to})`),
         }}
@@ -490,50 +675,74 @@ export default function Index() {
           ease: "linear",
         }}
       >
-        Radius
+        <span className="text-4xl sm:text-6xl">Radius Impact</span>
       </motion.h1>
 
-      {/* White Coordinate Input */}
-      <form 
-        onSubmit={handleCoordSubmit}
-        className="absolute top-4 right-4 flex flex-col gap-2 z-10 bg-white/90 backdrop-blur p-3 
-          rounded-xl shadow-lg border border-white/50"
-      >
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={coordInput}
-            onChange={(e) => {
-              setInputError(null);
-              setCoordInput(e.target.value);
-            }}
-            placeholder="x:y"
-            pattern="-?\d+:-?\d+"
-            className={`px-4 py-2 rounded-lg
-              bg-gray-50 text-gray-900
-              placeholder-gray-400
-              focus:ring-2 focus:ring-white focus:ring-offset-2
-              outline-none transition-all font-medium text-lg
-              border-2 ${inputError ? 'border-red-500' : 'border-white'}
-              shadow-inner`}
-            title={`Format: x:y (e.g., 100:-200) Range: ${MIN_COORD} to ${MAX_COORD}`}
-          />
-          <button
-            type="submit"
-            className="px-6 py-2 bg-white text-gray-900 rounded-lg shadow-lg
-              hover:bg-gray-50 active:bg-gray-100 transition-all font-bold text-lg
-              focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2
-              border-2 border-white"
+      {/* White Coordinate Input with dropdown trigger */}
+      <div className="absolute top-4 right-4 z-10">
+        {showNavigator ? (
+          <form 
+            onSubmit={handleCoordSubmit}
+            className="flex flex-col gap-2 bg-white/90 backdrop-blur p-3 
+              rounded-xl shadow-lg border border-white/50"
           >
-            Go
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={coordInput}
+                onChange={(e) => {
+                  setInputError(null);
+                  setCoordInput(e.target.value);
+                }}
+                placeholder="x:y"
+                pattern="-?\d+:-?\d+"
+                className={`w-32 px-3 py-2 rounded-lg
+                  bg-gray-50 text-gray-900
+                  placeholder-gray-400
+                  focus:ring-2 focus:ring-white focus:ring-offset-2
+                  outline-none transition-all font-medium text-lg
+                  border-2 ${inputError ? 'border-red-500' : 'border-white'}
+                  shadow-inner`}
+                title={`Format: x:y (e.g., 100:-200) Range: ${MIN_COORD} to ${MAX_COORD}`}
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 bg-white text-gray-900 rounded-lg shadow-lg
+                  hover:bg-gray-50 active:bg-gray-100 transition-all font-bold text-lg
+                  focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2
+                  border-2 border-white"
+              >
+                Go
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowNavigator(false)}
+                className="p-2 bg-white text-2xl rounded-lg shadow-lg
+                  hover:bg-gray-50 active:bg-gray-100 transition-all
+                  focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2
+                  border-2 border-white"
+                title="Close Navigator"
+              >
+                🧭
+              </button>
+            </div>
+            {inputError && (
+              <div className="text-red-500 text-sm font-medium px-1">
+                {inputError}
+              </div>
+            )}
+          </form>
+        ) : (
+          <button
+            onClick={() => setShowNavigator(true)}
+            className="p-3 bg-white/90 backdrop-blur rounded-xl shadow-lg border border-white/50
+              hover:bg-white/100 transition-all text-2xl"
+            title="Open Navigator"
+          >
+            🧭
           </button>
-        </div>
-        {inputError && (
-          <div className="text-red-500 text-sm font-medium px-1">
-            {inputError}
-          </div>
         )}
-      </form>
+      </div>
 
       {/* Updated score display with calculation dropdown */}
       <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2">
@@ -558,23 +767,33 @@ export default function Index() {
         </div>
         
         {/* Calculation details */}
-        {showCalculation && lastCalculation && (
+        {showCalculation && (
           <div className="bg-white/90 backdrop-blur p-4 rounded-xl shadow-lg border border-white/50
             text-gray-900 font-medium">
-            <div>New Value: {lastCalculation.newValue}</div>
-            {!isSpecialCell(lastCalculation.newValue) && (
-              <>
-                <div>Radius Sum: {lastCalculation.radiusSum}</div>
-                <div>Multiplier: {lastCalculation.multiplier}</div>
-                <div className="mt-2 pt-2 border-t border-gray-200 font-bold">
-                  Total Added: {lastCalculation.total}
-                </div>
-              </>
-            )}
-            {lastCalculation.specialEffect && (
-              <div className="mt-2 pt-2 border-t border-gray-200 font-bold text-red-500">
-                {lastCalculation.specialEffect}
-              </div>
+            {hasGameStarted ? (
+              lastCalculation ? (
+                <>
+                  <div>New Value: {lastCalculation.newValue}</div>
+                  {!isSpecialCell(lastCalculation.newValue) && (
+                    <>
+                      <div>Radius Sum: {lastCalculation.radiusSum}</div>
+                      <div>Multiplier: {lastCalculation.multiplier}</div>
+                      <div className="mt-2 pt-2 border-t border-gray-200 font-bold">
+                        Total Added: {lastCalculation.total}
+                      </div>
+                    </>
+                  )}
+                  {lastCalculation.specialEffect && (
+                    <div className="mt-2 pt-2 border-t border-gray-200 font-bold text-red-500">
+                      {lastCalculation.specialEffect}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div>No calculations yet</div>
+              )
+            ) : (
+              <div>Start game to see round result</div>
             )}
           </div>
         )}
@@ -587,6 +806,9 @@ export default function Index() {
         onMouseMove={handleMouseMove}
         onMouseEnter={handleGridMouseEnter}
         onMouseLeave={handleGridMouseLeave}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={() => setIsDragging(false)}
       >
         <div 
           className="grid gap-0.5 bg-gray-50"
@@ -614,7 +836,7 @@ export default function Index() {
                   key={`${cell.x}:${cell.y}`}
                   data-coords={`${cell.x}:${cell.y}`}
                   className={`
-                    ${cell.color}
+                    ${getBurnColor(`${cell.x}:${cell.y}`, cell.color)}
                     ${!cell.isOutOfBounds && isGridHovered && !cellValues.has(`${cell.x}:${cell.y}`) 
                       ? 'hover:ring-2 hover:ring-[#ff0000] hover:ring-opacity-100 hover:z-10' 
                       : ''} 
@@ -636,7 +858,8 @@ export default function Index() {
                     } : {}),
                     ...(cell.isTarget ? {
                       '--tw-ring-opacity': getTargetOpacity()
-                    } : {})
+                    } : {}),
+                    transitionDuration: isBurning ? '500ms' : '150ms',
                   }}
                   onClick={() => !isDragging && !cell.isOutOfBounds && handlePixelClick(cell.x, cell.y)}
                 >
@@ -646,7 +869,7 @@ export default function Index() {
                       isSpecialCell(cellValues.get(`${cell.x}:${cell.y}`))
                         ? 'text-xl font-black'
                         : getValueFontSize(cellValues.get(`${cell.x}:${cell.y}`) as number)
-                    }`}>
+                    } ${burningCells.has(`${cell.x}:${cell.y}`) ? 'opacity-0' : ''} transition-opacity`}>
                       {cellValues.get(`${cell.x}:${cell.y}`)}
                     </span>
                   )}
@@ -669,7 +892,7 @@ export default function Index() {
 
       {/* Game Over Popup */}
       {gameOver && (
-        <div className="fixed inset-0 bg-black/30 z-50 
+        <div className="fixed inset-0 bg-black/60 z-50 
           flex items-center justify-center">
           <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4
             flex flex-col items-center gap-6">
@@ -679,6 +902,59 @@ export default function Index() {
             <p className="text-xl font-bold text-gray-700">
               Final Score: {gameOver.score}
             </p>
+            
+            {/* Share buttons */}
+            <div className="flex flex-wrap gap-3 justify-center">
+              <a
+                href={getShareUrls(gameOver.score).twitter}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-3 rounded-xl bg-[#1DA1F2] text-white hover:opacity-90 transition-opacity"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085a4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+                </svg>
+              </a>
+              <a
+                href={getShareUrls(gameOver.score).telegram}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-3 rounded-xl bg-[#0088cc] text-white hover:opacity-90 transition-opacity"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-12S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                </svg>
+              </a>
+              <a
+                href={getShareUrls(gameOver.score).facebook}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-3 rounded-xl bg-[#1877F2] text-white hover:opacity-90 transition-opacity"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+              </a>
+              <a
+                href={getShareUrls(gameOver.score).wechat}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-3 rounded-xl bg-[#07C160] text-white hover:opacity-90 transition-opacity"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8.691 2C3.891 2 0 5.288 0 9.342c0 2.212 1.17 4.203 3.002 5.55.183.15.298.39.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446C13.137 8.77 15.316 8.205 17.287 8.347c-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.133 0 .24-.11.24-.246 0-.06-.024-.12-.04-.177l-.325-1.233a.492.492 0 01.177-.554c1.529-1.125 2.531-2.825 2.531-4.724 0-3.176-3.087-5.866-7.09-6.018zm-2.46 3.942c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
+                </svg>
+              </a>
+              <button
+                onClick={copyToClipboard}
+                className="p-3 rounded-xl bg-gray-800 text-white hover:opacity-90 transition-opacity"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+                </svg>
+              </button>
+            </div>
+
             <button
               onClick={restartGame}
               className="px-8 py-3 bg-red-500 text-white rounded-xl shadow-lg
