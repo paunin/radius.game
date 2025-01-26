@@ -1,0 +1,3 @@
+rm app/routes/contact.tsx
+rm app/routes/posts.tsx
+rm app/styles/global.css

@@ -23,7 +23,8 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./app/*"]
+      "~/*": ["./app/*"],
+      "framer-motion": ["./node_modules/framer-motion"]
     },
 
     // Vite takes care of building everything, not tsc.
