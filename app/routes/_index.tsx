@@ -85,10 +85,10 @@ const FINISH_COLORS = [
 
 // Update special cell configuration
 const SPECIAL_CELLS = {
-  X: { chance: 1/25, label: 'Game Over' },
-  I: { chance: 1/10, label: 'Invert Score' },
-  Z: { label: 'Zero Score', chance: 1/15 },
-  F: { chance: 1/20, label: 'Finish Game' }
+  X: { chance: 1/50, label: 'Game Over' },     // Changed from 1/25
+  I: { chance: 1/20, label: 'Invert Score' },  // Changed from 1/10
+  Z: { label: 'Zero Score', chance: 1/30 },    // Changed from 1/15
+  F: { chance: 1/40, label: 'Finish Game' }    // Changed from 1/20
 } as const;
 
 type SpecialCell = keyof typeof SPECIAL_CELLS;
@@ -491,8 +491,7 @@ export default function Index() {
       setCellValues(new Map(cellValues.set(coords, value)));
       setPixels(new Map(pixels.set(coords, color)));
 
-      if (!isSpecialCell(value)) {
-        // Regular number calculation
+      if (typeof value === 'number') {
         const scoreChange = calculateNewScore(x, y, value);
         setScore(prev => prev + scoreChange);
       }
@@ -1014,7 +1013,7 @@ export default function Index() {
                   {/* Show cell value if selected with dynamic font size */}
                   {cellValues.has(`${cell.x}:${cell.y}`) && (
                     <span className={`select-none text-gray-900 ${
-                      isSpecialCell(cellValues.get(`${cell.x}:${cell.y}`))
+                      isSpecialCell(cellValues.get(`${cell.x}:${cell.y}`)!)
                         ? 'text-xl font-black'
                         : getValueFontSize(cellValues.get(`${cell.x}:${cell.y}`) as number)
                     } ${burningCells.has(`${cell.x}:${cell.y}`) ? 'opacity-0' : ''} transition-opacity`}>
