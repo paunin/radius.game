@@ -75,6 +75,14 @@ const BURN_COLORS = [
   'bg-gray-900'     // End black
 ];
 
+// Add grayscale colors for F cell finish effect
+const FINISH_COLORS = [
+  'bg-white',         // Start white
+  'bg-gray-300',      // Light gray
+  'bg-gray-600',      // Medium gray
+  'bg-black'          // End black
+];
+
 // Update special cell configuration
 const SPECIAL_CELLS = {
   X: { chance: 1/25, label: 'Game Over' },
@@ -84,7 +92,7 @@ const SPECIAL_CELLS = {
 } as const;
 
 type SpecialCell = keyof typeof SPECIAL_CELLS;
-type CellValue = number | SpecialCell;
+type CellValue = number | SpecialCell | string;
 
 // Update LastCalculation type to include special events
 type LastCalculation = {
@@ -101,13 +109,26 @@ const isSpecialCell = (value: CellValue): value is SpecialCell =>
 
 // Add helper function to get numeric value safely
 const getNumericValue = (value: CellValue): number | null => {
-  return typeof value === 'number' ? value : null;
+  if (typeof value === 'number') return value;
+  if (EMOJI_CELLS.options.includes(value as string)) return 0;
+  return null;
 };
 
 // Keep types and constants outside the component
 type BurningCell = {
   startTime: number;
   duration: number;
+};
+
+// Add emoji constants near other constants
+const EMOJI_CELLS = {
+  chance: 1/15, // 1 in 15 chance
+  options: [
+    '🌟', '🌈', '🎈', '🎨', '🎭', '🎪', 
+    '🎯', '🎲', '🎮', '🎸', '🎹', '🌺',
+    '🌸', '🍀', '🌴', '🌙', '✨', '🎠',
+    '🎪', '🎭', '🎨', '🎪', '🎯', '🎲'
+  ]
 };
 
 export default function Index() {
@@ -143,7 +164,11 @@ export default function Index() {
   const [burningCells, setBurningCells] = useState<Map<string, BurningCell>>(new Map());
   const [isBurning, setIsBurning] = useState(false);
   const [showNavigator, setShowNavigator] = useState(false);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Add ref for timeout
+  const autoPlayTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Move helper functions inside component
   const getShareText = (score: number) => `I scored ${score} points in Radius Game!`;
@@ -228,7 +253,7 @@ export default function Index() {
     requestAnimationFrame(animate);
   }, [isBurning]);
 
-  // Move getBurnColor helper inside component
+  // Update getBurnColor helper to use different colors for F cell
   const getBurnColor = (coords: string, baseColor: string) => {
     if (!isBurning || !burningCells.has(coords)) return baseColor;
     
@@ -236,18 +261,20 @@ export default function Index() {
     const elapsed = Date.now() - cell.startTime;
     const progress = Math.min(1, elapsed / cell.duration);
     
-    const colors = BURN_COLORS;
+    // Use FINISH_COLORS if game is finished, otherwise use BURN_COLORS
+    const colors = gameOver?.reason === 'Game Finished!' ? FINISH_COLORS : BURN_COLORS;
     const index = Math.floor(progress * (colors.length - 1));
     return colors[index];
   };
 
-  // Add restart function inside component
+  // Update restartGame function to clear auto-play state
   const restartGame = () => {
     setScore(0);
     setCellValues(new Map());
     setPixels(new Map());
     setSelectedColor(null);
     setGameOver(null);
+    setIsAutoPlaying(false);
   };
 
   // Update viewport size on window resize
@@ -293,7 +320,7 @@ export default function Index() {
     return colors[Math.floor(Math.random() * colors.length)];
   };
 
-  // Update calculateNewScore to handle special cells
+  // Update calculateNewScore to skip emoji cells
   const calculateNewScore = (x: number, y: number, value: number) => {
     let radiusSum = 0;
     const involvedCells = new Set<string>();
@@ -301,8 +328,8 @@ export default function Index() {
     
     // Sum up all values within radius (excluding the new cell)
     for (const [coords, cellValue] of cellValues.entries()) {
-      // Skip the newly revealed cell
-      if (coords === newCellCoords) continue;
+      // Skip the newly revealed cell and emoji cells
+      if (coords === newCellCoords || EMOJI_CELLS.options.includes(cellValue as string)) continue;
       
       const [cellX, cellY] = coords.split(':').map(Number);
       const distance = calculateDistance(x, y, cellX, cellY);
@@ -344,9 +371,9 @@ export default function Index() {
     return () => clearTimeout(timer);
   }, [blinkTimestamp]);
 
-  // Update handlePixelClick with F cell and game over handling
+  // Update handlePixelClick probability handling
   const handlePixelClick = (x: number, y: number) => {
-    if (gameOver) return; // Prevent clicks when game is over
+    if (gameOver) return;
     
     if (x >= MIN_COORD && x <= MAX_COORD && 
         y >= MIN_COORD && y <= MAX_COORD && 
@@ -358,12 +385,37 @@ export default function Index() {
       let specialEffect: string | undefined;
       let cumChance = 0;
 
-      // Handle special cells with cumulative probability
+      // First check for emoji with its own random roll
+      if (Math.random() < EMOJI_CELLS.chance) {
+        // Emoji cell
+        value = EMOJI_CELLS.options[Math.floor(Math.random() * EMOJI_CELLS.options.length)];
+        
+        const color = selectedColor || getRandomColor();
+        if (!selectedColor) {
+          setSelectedColor(color);
+        }
+
+        setCellValues(new Map(cellValues.set(coords, value)));
+        setPixels(new Map(pixels.set(coords, color)));
+
+        setLastCalculation({
+          newValue: value,
+          radiusSum: 0,
+          multiplier: 0,
+          total: 0,
+          specialEffect: "Decorative Cell"
+        });
+        
+        return;
+      }
+
+      // Handle special cells with original probabilities
       if (rand < (cumChance += SPECIAL_CELLS.X.chance)) {
         value = 'X';
         specialEffect = 'Game Over!';
         setGameOver({ score: 0, reason: 'Game Over!' });
         setScore(0);
+        setIsAutoPlaying(false);
         
         // Clear all values immediately
         const visibleCells = new Set<string>();
@@ -393,6 +445,32 @@ export default function Index() {
         value = 'F';
         specialEffect = 'Game Finished!';
         setGameOver({ score, reason: 'Game Finished!' });
+        setIsAutoPlaying(false);
+        
+        // Clear all values immediately
+        const visibleCells = new Set<string>();
+        getVisibleGrid().forEach(row => {
+          row.forEach(cell => {
+            if (!cell.isOutOfBounds) {
+              visibleCells.add(`${cell.x}:${cell.y}`);
+            }
+          });
+        });
+        
+        // Clear values and start burning with checker colors
+        setCellValues(new Map());
+        setIsBurning(true);
+        
+        // Initialize burning for all visible cells
+        const burningCellsMap = new Map<string, BurningCell>();
+        visibleCells.forEach(coords => {
+          burningCellsMap.set(coords, {
+            startTime: Date.now() + Math.random() * ANIMATIONS.BURN_DELAY_MAX,
+            duration: ANIMATIONS.BURN_DURATION_MIN + Math.random() * 
+              (ANIMATIONS.BURN_DURATION_MAX - ANIMATIONS.BURN_DURATION_MIN)
+          });
+        });
+        setBurningCells(burningCellsMap);
       } else if (rand < (cumChance += SPECIAL_CELLS.I.chance)) {
         value = 'I';
         specialEffect = 'Score Inverted!';
@@ -660,6 +738,61 @@ export default function Index() {
     }
   };
 
+  // Update auto-play helper function
+  const autoPlayMove = () => {
+    // Stop if game is over or auto-play is off
+    if (!isAutoPlaying || gameOver) {
+      setIsAutoPlaying(false);
+      if (autoPlayTimeoutRef.current) {
+        clearTimeout(autoPlayTimeoutRef.current);
+      }
+      return;
+    }
+
+    // Get all available cells in visible area
+    const availableCells: {x: number, y: number}[] = [];
+    getVisibleGrid().forEach(row => {
+      row.forEach(cell => {
+        if (!cell.isOutOfBounds && !cellValues.has(`${cell.x}:${cell.y}`)) {
+          availableCells.push({ x: cell.x, y: cell.y });
+        }
+      });
+    });
+
+    // If there are available cells, pick one randomly
+    if (availableCells.length > 0) {
+      const randomCell = availableCells[Math.floor(Math.random() * availableCells.length)];
+      handlePixelClick(randomCell.x, randomCell.y);
+      
+      // Only schedule next move if game hasn't ended
+      if (!gameOver) {
+        autoPlayTimeoutRef.current = setTimeout(autoPlayMove, Math.random() * 500 + 200);
+      }
+    } else {
+      setIsAutoPlaying(false);
+    }
+  };
+
+  // Update effect to handle auto-play state changes
+  useEffect(() => {
+    if (isAutoPlaying && !gameOver) {
+      autoPlayMove();
+    }
+
+    // Cleanup function to clear timeout
+    return () => {
+      if (autoPlayTimeoutRef.current) {
+        clearTimeout(autoPlayTimeoutRef.current);
+      }
+    };
+  }, [isAutoPlaying, gameOver]);
+
+  // Add helper function to restart with autoplay
+  const restartWithAutoplay = () => {
+    restartGame();
+    setIsAutoPlaying(true);
+  };
+
   return (
     <div className="fixed inset-0 bg-gray-100 dark:bg-gray-900">
       {/* Dynamic Logo */}
@@ -799,6 +932,21 @@ export default function Index() {
         )}
       </div>
 
+      {/* Auto-play button */}
+      <div className="absolute bottom-4 right-4 z-10">
+        <button
+          onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+          className={`p-4 rounded-xl shadow-lg transition-all font-bold text-2xl
+            ${isAutoPlaying 
+              ? 'bg-red-500 hover:bg-red-600 active:bg-red-700' 
+              : 'bg-white hover:bg-gray-50 active:bg-gray-100'}
+            border-2 border-white`}
+          title={isAutoPlaying ? 'Stop Auto-play' : 'Start Auto-play'}
+        >
+          🤖
+        </button>
+      </div>
+
       <div 
         ref={containerRef}
         className={`w-full h-full overflow-hidden ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
@@ -922,7 +1070,7 @@ export default function Index() {
                 className="p-3 rounded-xl bg-[#0088cc] text-white hover:opacity-90 transition-opacity"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-12S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-12S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.14.27-.01.06.01.24 0 .38z"/>
                 </svg>
               </a>
               <a
@@ -955,14 +1103,27 @@ export default function Index() {
               </button>
             </div>
 
-            <button
-              onClick={restartGame}
-              className="px-8 py-3 bg-red-500 text-white rounded-xl shadow-lg
-                hover:bg-red-600 active:bg-red-700 transition-colors
-                font-bold text-lg"
-            >
-              Play Again
-            </button>
+            {/* Add buttons container with gap */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button
+                onClick={restartGame}
+                className="px-8 py-3 bg-red-500 text-white rounded-xl shadow-lg
+                  hover:bg-red-600 active:bg-red-700 transition-colors
+                  font-bold text-lg"
+              >
+                Play Again
+              </button>
+              
+              <button
+                onClick={restartWithAutoplay}
+                className="p-3 bg-blue-500 text-white rounded-xl shadow-lg
+                  hover:bg-blue-600 active:bg-blue-700 transition-colors
+                  text-2xl"
+                title="Play with Bot"
+              >
+                🤖
+              </button>
+            </div>
           </div>
         </div>
       )}
