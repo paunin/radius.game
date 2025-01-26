@@ -1,6 +1,10 @@
 # Radius Impact
 
+![Radius Impact Game Preview](public/images/preview.png)
+
 A strategic grid-based number game where every move counts! Reveal numbers, combine values within radius, and aim for the highest score.
+
+🎮 [Play Live Demo](https://radius-game.onrender.com/)
 
 ## Game Rules
 
