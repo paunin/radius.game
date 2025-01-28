@@ -20,38 +20,28 @@ const MIN_COORD = -10000;
 const MAX_COORD = 10000;
 const HIGHLIGHT_RADIUS = 15;
 
-// Add these color arrays near other constants
+// Update LOGO_COLORS with darker but colorful colors
 const LOGO_COLORS = [
-  ["#ff0000", "#ff3300"],  // Red to Orange
-  ["#ff3300", "#ff6600"],  // Orange to Darker Orange
-  ["#ff6600", "#ff9900"],  // Orange to Yellow
-  ["#ff9900", "#ffcc00"],  // Yellow to Light Yellow
-  ["#ffcc00", "#ffff00"],  // Yellow to Bright Yellow
-  ["#ffff00", "#ccff00"],  // Yellow to Lime
-  ["#ccff00", "#99ff00"],  // Lime to Light Green
-  ["#99ff00", "#66ff00"],  // Light Green to Green
-  ["#66ff00", "#33ff00"],  // Green to Bright Green
-  ["#33ff00", "#00ff00"],  // Bright Green
-  ["#00ff00", "#00ff33"],  // Green to Cyan
-  ["#00ff33", "#00ff66"],  // Cyan shades
-  ["#00ff66", "#00ff99"],
-  ["#00ff99", "#00ffcc"],
-  ["#00ffcc", "#00ffff"],  // Cyan to Blue
-  ["#00ffff", "#00ccff"],
-  ["#00ccff", "#0099ff"],
-  ["#0099ff", "#0066ff"],
-  ["#0066ff", "#0033ff"],
-  ["#0033ff", "#0000ff"],  // Blue
-  ["#0000ff", "#3300ff"],  // Blue to Purple
-  ["#3300ff", "#6600ff"],
-  ["#6600ff", "#9900ff"],
-  ["#9900ff", "#cc00ff"],
-  ["#cc00ff", "#ff00ff"],  // Purple to Pink
-  ["#ff00ff", "#ff00cc"],
-  ["#ff00cc", "#ff0099"],
-  ["#ff0099", "#ff0066"],
-  ["#ff0066", "#ff0033"],
-  ["#ff0033", "#ff0000"],  // Back to Red
+  ["#c1121f", "#780000"],  // Deep red
+  ["#780000", "#9b2226"],  // Dark red to burgundy
+  ["#9b2226", "#7209b7"],  // Burgundy to deep purple
+  ["#7209b7", "#480ca8"],  // Deep purple shades
+  ["#480ca8", "#3f37c9"],  // Purple to indigo
+  ["#3f37c9", "#4361ee"],  // Indigo to blue
+  ["#4361ee", "#4895ef"],  // Blue shades
+  ["#4895ef", "#0077b6"],  // Blue to deep blue
+  ["#0077b6", "#023e8a"],  // Deep blue
+  ["#023e8a", "#03045e"],  // Navy blue
+  ["#03045e", "#073b4c"],  // Navy to teal
+  ["#073b4c", "#0a9396"],  // Deep teal
+  ["#0a9396", "#006466"],  // Teal shades
+  ["#006466", "#004b23"],  // Teal to forest green
+  ["#004b23", "#386641"],  // Forest green
+  ["#386641", "#7b2cbf"],  // Green to purple
+  ["#7b2cbf", "#9d0208"],  // Purple to red
+  ["#9d0208", "#6a040f"],  // Red shades
+  ["#6a040f", "#370617"],  // Deep red
+  ["#370617", "#c1121f"],  // Back to starting red
 ];
 
 // Update cell value constants
@@ -169,6 +159,9 @@ export default function Index() {
 
   // Add ref for timeout
   const autoPlayTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Add new state for rules popup
+  const [showRules, setShowRules] = useState(false);
 
   // Move helper functions inside component
   const getShareText = (score: number) => `I scored ${score} points in Radius Game!`;
@@ -796,18 +789,37 @@ export default function Index() {
     <div className="fixed inset-0 bg-gray-100 dark:bg-gray-900">
       {/* Dynamic Logo */}
       <motion.h1 
-        className="absolute top-4 left-4 z-10 font-black tracking-tight bg-clip-text text-transparent select-none
-          flex flex-col sm:flex-row items-start sm:items-center gap-0 sm:gap-2"
-        animate={{ 
-          backgroundImage: LOGO_COLORS.map(([from, to]) => `linear-gradient(45deg, ${from}, ${to})`),
-        }}
-        transition={{ 
-          duration: 20,
-          repeat: Infinity,
-          ease: "linear",
-        }}
+        className="absolute top-4 left-4 z-10 font-black tracking-tight select-none
+          flex flex-col items-start gap-0"
       >
-        <span className="text-4xl sm:text-6xl">Radius Impact</span>
+        <motion.span 
+          className="text-4xl sm:text-6xl bg-clip-text text-transparent"
+          animate={{ 
+            backgroundImage: LOGO_COLORS.map(([from, to]) => `linear-gradient(45deg, ${from}, ${to})`),
+          }}
+          transition={{ 
+            duration: 10,
+            repeat: Infinity,
+            ease: "linear",
+            delay: 0
+          }}
+        >
+          Radius
+        </motion.span>
+        <motion.span 
+          className="text-4xl sm:text-6xl -mt-2 bg-clip-text text-transparent"
+          animate={{ 
+            backgroundImage: LOGO_COLORS.map(([from, to]) => `linear-gradient(45deg, ${from}, ${to})`),
+          }}
+          transition={{ 
+            duration: 10,
+            repeat: Infinity,
+            ease: "linear",
+            delay: 5
+          }}
+        >
+          Impact
+        </motion.span>
       </motion.h1>
 
       {/* White Coordinate Input with dropdown trigger */}
@@ -895,6 +907,13 @@ export default function Index() {
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
+          </button>
+          <button
+            onClick={() => setShowRules(true)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-xl"
+            title="Game Rules"
+          >
+            ❓
           </button>
         </div>
         
@@ -1089,7 +1108,7 @@ export default function Index() {
                 className="p-3 rounded-xl bg-[#07C160] text-white hover:opacity-90 transition-opacity"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8.691 2C3.891 2 0 5.288 0 9.342c0 2.212 1.17 4.203 3.002 5.55.183.15.298.39.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446C13.137 8.77 15.316 8.205 17.287 8.347c-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.133 0 .24-.11.24-.246 0-.06-.024-.12-.04-.177l-.325-1.233a.492.492 0 01.177-.554c1.529-1.125 2.531-2.825 2.531-4.724 0-3.176-3.087-5.866-7.09-6.018zm-2.46 3.942c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
+                  <path d="M8.691 2C3.891 2 0 5.288 0 9.342c0 2.212 1.17 4.203 3.002 5.55.183.15.298.39.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.295.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446C13.137 8.77 15.316 8.205 17.287 8.347c-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.133 0 .24-.11.24-.246 0-.06-.024-.12-.04-.177l-.325-1.233a.492.492 0 01.177-.554c1.529-1.125 2.531-2.825 2.531-4.724 0-3.176-3.087-5.866-7.09-6.018zm-2.46 3.942c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
                 </svg>
               </a>
               <button
@@ -1122,6 +1141,64 @@ export default function Index() {
               >
                 🤖
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Rules Popup */}
+      {showRules && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-gray-900">Game Rules</h2>
+              <button 
+                onClick={() => setShowRules(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-xl"
+                title="Close"
+              >
+                ✖️
+              </button>
+            </div>
+
+            <div className="space-y-6 text-gray-700">
+              <section>
+                <h3 className="text-xl font-bold mb-2">Basic Mechanics</h3>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li>Click any cell to reveal a random value (-23 to 20)</li>
+                  <li>Each revealed number affects cells within a 15-unit radius</li>
+                  <li>Score calculation: New value + (Sum of values in radius × |New value|)</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-xl font-bold mb-2">Special Cells</h3>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li><span className="font-bold">X</span>: Game Over - Ends game immediately, score becomes 0</li>
+                  <li><span className="font-bold">I</span>: Invert Score - Multiplies your current score by -1</li>
+                  <li><span className="font-bold">Z</span>: Zero Score - Resets your score to 0</li>
+                  <li><span className="font-bold">F</span>: Finish Game - Ends the game, keeping your current score</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-xl font-bold mb-2">Navigation</h3>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li>Drag the grid to explore</li>
+                  <li>Use the 🧭 navigator to jump to specific coordinates</li>
+                  <li>Valid coordinate range: -10000 to 10000</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-xl font-bold mb-2">Strategy Tips</h3>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li>Look for high positive numbers to multiply radius values</li>
+                  <li>Be cautious with negative numbers - they can reduce your score</li>
+                  <li>Special cells appear randomly - they can help or hurt your strategy</li>
+                  <li>Plan your moves to maximize the radius effect</li>
+                </ul>
+              </section>
             </div>
           </div>
         </div>
