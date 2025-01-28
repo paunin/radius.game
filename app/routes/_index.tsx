@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import type { MetaFunction } from "@remix-run/node";
 import { motion } from "framer-motion";
+import { getTranslation, languageNames, type Language } from "../i18n/index";
+import { useSearchParams, useNavigate } from "@remix-run/react";
 
 export const meta: MetaFunction = () => {
   return [
@@ -122,6 +124,10 @@ const EMOJI_CELLS = {
 };
 
 export default function Index() {
+  // Add before other state declarations
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
   // Add at the beginning of the component, with other helper functions
   const getValueFontSize = (value: number) => {
     const numDigits = Math.abs(value).toString().length + (value < 0 ? 1 : 0);
@@ -162,6 +168,51 @@ export default function Index() {
 
   // Add new state for rules popup
   const [showRules, setShowRules] = useState(false);
+
+  // Replace the language state initialization
+  const [language, setLanguage] = useState<Language>(() => {
+    // First priority: URL parameter
+    const langParam = searchParams.get('lang') as Language;
+    if (langParam && Object.keys(languageNames).includes(langParam)) {
+      return langParam;
+    }
+    return 'en'; // Default to English
+  });
+
+  // Add translation initialization
+  const t = getTranslation(language);
+
+  // Add effect for browser language detection
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Skip if we already have a language from URL
+    const langParam = searchParams.get('lang');
+    if (langParam && Object.keys(languageNames).includes(langParam)) return;
+
+    // Check browser language
+    const browserLang = navigator.language.split('-')[0] as Language;
+    if (Object.keys(languageNames).includes(browserLang)) {
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('lang', browserLang);
+      navigate(newUrl.pathname + newUrl.search, { replace: true });
+      setLanguage(browserLang);
+    }
+  }, []); // Run once on mount
+
+  // Update language setter to also update URL
+  const handleLanguageChange = (newLang: Language) => {
+    setLanguage(newLang);
+    if (typeof window !== 'undefined') {
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('lang', newLang);
+      navigate(newUrl.pathname + newUrl.search, { replace: true });
+    }
+    setShowLanguages(false);
+  };
+
+  // Add language dropdown state
+  const [showLanguages, setShowLanguages] = useState(false);
 
   // Move helper functions inside component
   const getShareText = (score: number) => `I scored ${score} points in Radius Game!`;
@@ -865,7 +916,7 @@ export default function Index() {
                   hover:bg-gray-50 active:bg-gray-100 transition-all
                   focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2
                   border-2 border-white"
-                title="Close Navigator"
+                title={t.game.closeNavigator}
               >
                 🧭
               </button>
@@ -881,7 +932,7 @@ export default function Index() {
             onClick={() => setShowNavigator(true)}
             className="p-3 bg-white/90 backdrop-blur rounded-xl shadow-lg border border-white/50
               hover:bg-white/100 transition-all text-2xl"
-            title="Open Navigator"
+            title={t.game.openNavigator}
           >
             🧭
           </button>
@@ -893,7 +944,7 @@ export default function Index() {
         <div className="bg-white/90 backdrop-blur p-4 rounded-xl shadow-lg border border-white/50 
           flex items-center gap-3">
           <div className="text-xl font-bold text-gray-900">
-            Your Score: {score}
+            {t.game.score}: {score}
           </div>
           <button
             onClick={() => setShowCalculation(!showCalculation)}
@@ -908,46 +959,72 @@ export default function Index() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          <button
-            onClick={() => setShowRules(true)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-xl"
-            title="Game Rules"
-          >
-            ❓
-          </button>
-        </div>
-        
-        {/* Calculation details */}
-        {showCalculation && (
-          <div className="bg-white/90 backdrop-blur p-4 rounded-xl shadow-lg border border-white/50
-            text-gray-900 font-medium">
-            {hasGameStarted ? (
-              lastCalculation ? (
-                <>
-                  <div>New Value: {lastCalculation.newValue}</div>
-                  {!isSpecialCell(lastCalculation.newValue) && (
-                    <>
-                      <div>Radius Sum: {lastCalculation.radiusSum}</div>
-                      <div>Multiplier: {lastCalculation.multiplier}</div>
-                      <div className="mt-2 pt-2 border-t border-gray-200 font-bold">
-                        Total Added: {lastCalculation.total}
-                      </div>
-                    </>
-                  )}
-                  {lastCalculation.specialEffect && (
-                    <div className="mt-2 pt-2 border-t border-gray-200 font-bold text-red-500">
-                      {lastCalculation.specialEffect}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div>No calculations yet</div>
-              )
-            ) : (
-              <div>Start game to see round result</div>
-            )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowRules(true)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-xl"
+              title={t.rules.title}
+            >
+              ❓
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowLanguages(!showLanguages)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-xl"
+                title={t.rules.changeLanguage}
+              >
+                🌐
+              </button>
+              {showLanguages && (
+                <div className="absolute bottom-full right-0 mb-2 bg-white/90 backdrop-blur rounded-lg shadow-lg border border-gray-200 py-1 min-w-[120px]">
+                  {(Object.entries(languageNames) as [Language, string][]).map(([code, name]) => (
+                    <button
+                      key={code}
+                      onClick={() => handleLanguageChange(code)}
+                      className={`w-full px-4 py-2 text-left hover:bg-gray-100 text-gray-900 transition-colors ${
+                        language === code ? 'font-bold bg-gray-50 text-black' : ''
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+          
+          {/* Calculation details */}
+          {showCalculation && (
+            <div className="bg-white/90 backdrop-blur p-4 rounded-xl shadow-lg border border-white/50
+              text-gray-900 font-medium">
+              {hasGameStarted ? (
+                lastCalculation ? (
+                  <>
+                    <div>{t.calculation.newValue}: {lastCalculation.newValue}</div>
+                    {!isSpecialCell(lastCalculation.newValue) && (
+                      <>
+                        <div>{t.calculation.radiusSum}: {lastCalculation.radiusSum}</div>
+                        <div>{t.calculation.multiplier}: {lastCalculation.multiplier}</div>
+                        <div className="mt-2 pt-2 border-t border-gray-200 font-bold">
+                          {t.calculation.totalAdded}: {lastCalculation.total}
+                        </div>
+                      </>
+                    )}
+                    {lastCalculation.specialEffect && (
+                      <div className="mt-2 pt-2 border-t border-gray-200 font-bold text-red-500">
+                        {t.calculation.specialEffects[lastCalculation.specialEffect as keyof typeof t.calculation.specialEffects]}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div>{t.game.noCalculations}</div>
+                )
+              ) : (
+                <div>{t.game.startGame}</div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Auto-play button */}
@@ -959,7 +1036,7 @@ export default function Index() {
               ? 'bg-red-500 hover:bg-red-600 active:bg-red-700' 
               : 'bg-white hover:bg-gray-50 active:bg-gray-100'}
             border-2 border-white`}
-          title={isAutoPlaying ? 'Stop Auto-play' : 'Start Auto-play'}
+          title={isAutoPlaying ? t.game.stopAutoPlay : t.game.startAutoPlay}
         >
           🤖
         </button>
@@ -1058,15 +1135,14 @@ export default function Index() {
 
       {/* Game Over Popup */}
       {gameOver && (
-        <div className="fixed inset-0 bg-black/60 z-50 
-          flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
           <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4
             flex flex-col items-center gap-6">
             <h2 className="text-3xl font-black text-gray-900">
-              {gameOver.reason}
+              {t.game.gameOver}
             </h2>
             <p className="text-xl font-bold text-gray-700">
-              Final Score: {gameOver.score}
+              {t.game.finalScore}: {gameOver.score}
             </p>
             
             {/* Share buttons */}
@@ -1085,10 +1161,10 @@ export default function Index() {
                 href={getShareUrls(gameOver.score).telegram}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-3 rounded-xl bg-[#0088cc] text-white hover:opacity-90 transition-opacity"
+                className="p-3 rounded-xl bg-[#26A5E4] text-white hover:opacity-90 transition-opacity"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-12S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.14.27-.01.06.01.24 0 .38z"/>
+                  <path d="M20.572 3.012a1.5 1.5 0 00-1.866-.5L2.393 9.376a1.5 1.5 0 00-.117 2.74l3.624 1.577 2.49 6.223a1 1 0 001.863.002l2.357-4.714 4.718 2.359a1.5 1.5 0 002.157-1.176l2.5-12.5a1.5 1.5 0 00-.413-1.375zM7.5 14.5l-3-1.5 11-5.5-8 7z"/>
                 </svg>
               </a>
               <a
@@ -1108,7 +1184,8 @@ export default function Index() {
                 className="p-3 rounded-xl bg-[#07C160] text-white hover:opacity-90 transition-opacity"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8.691 2C3.891 2 0 5.288 0 9.342c0 2.212 1.17 4.203 3.002 5.55.183.15.298.39.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.295.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446C13.137 8.77 15.316 8.205 17.287 8.347c-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.133 0 .24-.11.24-.246 0-.06-.024-.12-.04-.177l-.325-1.233a.492.492 0 01.177-.554c1.529-1.125 2.531-2.825 2.531-4.724 0-3.176-3.087-5.866-7.09-6.018zm-2.46 3.942c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
+                  <path d="M8.5 4C5.5 4 3 6.1 3 8.7c0 1.4.8 2.6 2 3.4.1.1.2.2.1.4l-.3.9c0 .1-.1.2-.1.3 0 .1.1.2.2.2.2h.1l1.2-.7c.1-.1.2-.1.3 0 .7.2 1.3.3 2 .3h.3c-.1-.3-.1-.7-.1-1C8.6 9.9 11 8 14 8c.3 0 .5 0 .8.1C14.3 5.8 11.7 4 8.5 4zm-.7 3.3c.5 0 .9.4.9.9s-.4.9-.9.9-.9-.4-.9-.9.4-.9zm4.4 0c.5 0 .9.4.9.9s-.4.9-.9.9-.9-.4-.9-.9.4-.9.9-.9z"/>
+                  <path d="M19.2 11c-2.8 0-5 1.8-5 4s2.2 4 5 4c.6 0 1.1-.1 1.7-.2.1 0 .2 0 .2.1l1 .6h.1c.1 0 .2-.1.2-.2v-.3l-.2-.8c0-.1 0-.3.1-.3 1-.7 1.7-1.7 1.7-2.9 0-2.2-2.3-4-5-4zm-2.4 3.9c-.4 0-.7-.3-.7-.7 0-.4.3-.7.7-.7s.7.3.7.7c0 .4-.3.7-.7.7zm3.6 0c-.4 0-.7-.3-.7-.7 0-.4.3-.7.7-.7s.7.3.7.7c0 .4-.3.7-.7.7z"/>
                 </svg>
               </a>
               <button
@@ -1129,7 +1206,7 @@ export default function Index() {
                   hover:bg-red-600 active:bg-red-700 transition-colors
                   font-bold text-lg"
               >
-                Play Again
+                {t.game.playAgain}
               </button>
               
               <button
@@ -1137,7 +1214,7 @@ export default function Index() {
                 className="p-3 bg-blue-500 text-white rounded-xl shadow-lg
                   hover:bg-blue-600 active:bg-blue-700 transition-colors
                   text-2xl"
-                title="Play with Bot"
+                title={t.game.playWithBot}
               >
                 🤖
               </button>
@@ -1151,11 +1228,11 @@ export default function Index() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
           <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black text-gray-900">Game Rules</h2>
+              <h2 className="text-2xl font-black text-gray-900">{t.rules.title}</h2>
               <button 
                 onClick={() => setShowRules(false)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-xl"
-                title="Close"
+                title={t.rules.close}
               >
                 ✖️
               </button>
@@ -1163,40 +1240,38 @@ export default function Index() {
 
             <div className="space-y-6 text-gray-700">
               <section>
-                <h3 className="text-xl font-bold mb-2">Basic Mechanics</h3>
+                <h3 className="text-xl font-bold mb-2">{t.rules.basicMechanics.title}</h3>
                 <ul className="list-disc pl-5 space-y-2">
-                  <li>Click any cell to reveal a random value (-23 to 20)</li>
-                  <li>Each revealed number affects cells within a 15-unit radius</li>
-                  <li>Score calculation: New value + (Sum of values in radius × |New value|)</li>
+                  {t.rules.basicMechanics.items.map((item, index) => (
+                    <li key={index}>{item}</li>
+                  ))}
                 </ul>
               </section>
 
               <section>
-                <h3 className="text-xl font-bold mb-2">Special Cells</h3>
+                <h3 className="text-xl font-bold mb-2">{t.rules.specialCells.title}</h3>
                 <ul className="list-disc pl-5 space-y-2">
-                  <li><span className="font-bold">X</span>: Game Over - Ends game immediately, score becomes 0</li>
-                  <li><span className="font-bold">I</span>: Invert Score - Multiplies your current score by -1</li>
-                  <li><span className="font-bold">Z</span>: Zero Score - Resets your score to 0</li>
-                  <li><span className="font-bold">F</span>: Finish Game - Ends the game, keeping your current score</li>
+                  {t.rules.specialCells.items.map((item, index) => (
+                    <li key={index}>{item.key}: {item.desc}</li>
+                  ))}
                 </ul>
               </section>
 
               <section>
-                <h3 className="text-xl font-bold mb-2">Navigation</h3>
+                <h3 className="text-xl font-bold mb-2">{t.rules.navigation.title}</h3>
                 <ul className="list-disc pl-5 space-y-2">
-                  <li>Drag the grid to explore</li>
-                  <li>Use the 🧭 navigator to jump to specific coordinates</li>
-                  <li>Valid coordinate range: -10000 to 10000</li>
+                  {t.rules.navigation.items.map((item, index) => (
+                    <li key={index}>{item}</li>
+                  ))}
                 </ul>
               </section>
 
               <section>
-                <h3 className="text-xl font-bold mb-2">Strategy Tips</h3>
+                <h3 className="text-xl font-bold mb-2">{t.rules.strategy.title}</h3>
                 <ul className="list-disc pl-5 space-y-2">
-                  <li>Look for high positive numbers to multiply radius values</li>
-                  <li>Be cautious with negative numbers - they can reduce your score</li>
-                  <li>Special cells appear randomly - they can help or hurt your strategy</li>
-                  <li>Plan your moves to maximize the radius effect</li>
+                  {t.rules.strategy.items.map((item, index) => (
+                    <li key={index}>{item}</li>
+                  ))}
                 </ul>
               </section>
             </div>
